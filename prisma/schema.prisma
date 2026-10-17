@@ -1,0 +1,30 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ScanHistory {
+  id        String   @id @default(cuid())
+  type      String   // "scan" or "generated"
+  format    String   // e.g. "QR_CODE", "CODE_128", "EAN_13"
+  content   String   // the decoded text / source text
+  rawValue  String?  // optional raw value
+  note      String?  // user note
+  // Generator-specific options (stored as JSON string)
+  options   String?
+  // Preview image (data URL) for generated codes
+  imageData String?
+  isFavorite Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type])
+  @@index([createdAt])
+}
