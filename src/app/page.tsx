@@ -210,7 +210,17 @@ export default function Home() {
 
 function ThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
+  // During SSR / the first client render the user's OS theme is unknown on the
+  // server, so resolvedTheme can differ between server and client and cause a
+  // hydration mismatch. Render a neutral placeholder until mounted, then show
+  // the correct icon (post-mount re-renders are safe).
+  const [mounted, setMounted] = React.useState(false);
   const isDark = resolvedTheme === "dark";
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <Button
       variant="ghost"
@@ -219,7 +229,9 @@ function ThemeToggle() {
       className="h-9 w-9"
       aria-label="Toggle theme"
     >
-      {isDark ? (
+      {!mounted ? (
+        <span className="h-4 w-4" aria-hidden="true" />
+      ) : isDark ? (
         <Sun className="h-4 w-4" />
       ) : (
         <Moon className="h-4 w-4" />
