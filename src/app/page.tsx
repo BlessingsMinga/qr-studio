@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { toast, Toaster as SonnerToaster } from "sonner";
+import { useTheme } from "next-themes";
 import {
   QrCode as QrCodeIcon,
   ScanLine,
@@ -17,7 +18,7 @@ import { Badge } from "@/components/ui/badge";
 import { QrScanner } from "@/components/scanner/qr-scanner";
 import { QrGenerator } from "@/components/generator/qr-generator";
 import { HistoryView } from "@/components/history/history-view";
-import { decodeSharePayload } from "@/components/share-menu";
+import { decodeSharePayload } from "@/lib/qr/share";
 
 export default function Home() {
   const [activeTab, setActiveTab] = React.useState<
@@ -61,7 +62,7 @@ export default function Home() {
         ? result.text.slice(0, 60) + "..."
         : result.text,
     });
-    // Persist to history (dedupe identical recent scans)
+    // Persist to history
     try {
       const res = await fetch("/api/scans", {
         method: "POST",
@@ -208,31 +209,17 @@ export default function Home() {
 }
 
 function ThemeToggle() {
-  const [theme, setTheme] = React.useState<"light" | "dark">("light");
-  React.useEffect(() => {
-    const stored = localStorage.getItem("theme");
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initial = (stored as "light" | "dark") || (prefersDark ? "dark" : "light");
-    setTheme(initial);
-    document.documentElement.classList.toggle("dark", initial === "dark");
-  }, []);
-  function toggle() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    document.documentElement.classList.toggle("dark", next === "dark");
-    localStorage.setItem("theme", next);
-  }
+  const { resolvedTheme, setTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
   return (
     <Button
       variant="ghost"
       size="icon"
-      onClick={toggle}
+      onClick={() => setTheme(isDark ? "light" : "dark")}
       className="h-9 w-9"
       aria-label="Toggle theme"
     >
-      {theme === "dark" ? (
+      {isDark ? (
         <Sun className="h-4 w-4" />
       ) : (
         <Moon className="h-4 w-4" />
@@ -305,9 +292,13 @@ function SharedPreviewModal({
           <Button
             variant="outline"
             className="flex-1"
-            onClick={() => {
-              navigator.clipboard.writeText(content);
-              toast.success("Copied");
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(content);
+                toast.success("Copied");
+              } catch {
+                toast.error("Failed to copy");
+              }
             }}
           >
             Copy text

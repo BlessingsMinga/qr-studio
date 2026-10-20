@@ -46,6 +46,42 @@ export function escapeWifi(s: string): string {
   return s.replace(/([\\;,":])/g, "\\$1");
 }
 
+// RFC 6350 vCard value escaping: backslash, semicolon, comma, newline
+export function escapeVCard(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\n/g, "\\n");
+}
+
+// Split a display name into structured vCard N components (Last;First;Middle)
+export function splitVCardName(name: string): {
+  last: string;
+  first: string;
+  middle: string;
+} {
+  const trimmed = name.trim();
+  if (!trimmed) return { last: "", first: "", middle: "" };
+  // "Last, First [Middle]" style
+  if (trimmed.includes(",")) {
+    const [lastPart, ...rest] = trimmed.split(",");
+    const restParts = rest.join(",").trim().split(/\s+/);
+    return {
+      last: lastPart.trim(),
+      first: restParts[0] || "",
+      middle: restParts.slice(1).join(" "),
+    };
+  }
+  const parts = trimmed.split(/\s+/);
+  if (parts.length === 1) return { last: "", first: parts[0], middle: "" };
+  return {
+    last: parts[parts.length - 1],
+    first: parts[0],
+    middle: parts.slice(1, -1).join(" "),
+  };
+}
+
 export function buildContent(
   type: ContentType,
   data: Record<string, string>
@@ -82,14 +118,15 @@ export function buildContent(
       const email = data.email || "";
       const org = data.org || "";
       const url = data.url || "";
+      const { last, first, middle } = splitVCardName(name);
       return [
         "BEGIN:VCARD",
         "VERSION:3.0",
-        `N:${name}`,
-        `FN:${name}`,
+        `N:${escapeVCard(last)};${escapeVCard(first)};${escapeVCard(middle)};;`,
+        `FN:${escapeVCard(name)}`,
         phone ? `TEL:${phone}` : "",
         email ? `EMAIL:${email}` : "",
-        org ? `ORG:${org}` : "",
+        org ? `ORG:${escapeVCard(org)}` : "",
         url ? `URL:${url}` : "",
         "END:VCARD",
       ]
@@ -110,6 +147,9 @@ export function classifyContent(text: string): {
   if (!text) return { category: "text", label: "Text" };
   if (/^https?:\/\//i.test(text)) return { category: "url", label: "URL", href: text };
   if (/^mailto:/i.test(text)) return { category: "email", label: "Email", href: text };
+  if (/^MATMSG:/i.test(text)) return { category: "email", label: "Email" };
+  if (/^MEBKM:/i.test(text)) return { category: "bookmark", label: "Bookmark" };
+  if (/^bitcoin:/i.test(text)) return { category: "crypto", label: "Bitcoin", href: text };
   if (/^tel:/i.test(text)) return { category: "phone", label: "Phone", href: text };
   if (/^sms:/i.test(text)) return { category: "sms", label: "SMS", href: text };
   if (/^WIFI:/i.test(text)) return { category: "wifi", label: "WiFi" };

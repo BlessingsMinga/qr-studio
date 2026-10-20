@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Loader2,
   X,
+  Crosshair,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -43,6 +44,8 @@ export function QrScanner({ onScan }: QrScannerProps) {
   const readerRef = React.useRef<BrowserMultiFormatReader | null>(null);
   const lastResultRef = React.useRef<{ text: string; ts: number } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const isScanningRef = React.useRef(false);
+  const restartScanningRef = React.useRef(false);
 
   const [isScanning, setIsScanning] = React.useState(false);
   const [isStarting, setIsStarting] = React.useState(false);
@@ -58,8 +61,10 @@ export function QrScanner({ onScan }: QrScannerProps) {
     format: string;
     ts: number;
   } | null>(null);
+  // "Precision" toggle: TRY_HARDER catches more codes but is slower to decode
+  const [highPrecision, setHighPrecision] = React.useState(true);
 
-  // Build the reader once
+  // Build the reader; rebuild it when the precision toggle changes.
   React.useEffect(() => {
     const hints = new Map();
     hints.set(DecodeHintType.POSSIBLE_FORMATS, [
@@ -79,13 +84,28 @@ export function QrScanner({ onScan }: QrScannerProps) {
       BarcodeFormat.RSS_14,
       BarcodeFormat.RSS_EXPANDED,
     ]);
-    hints.set(DecodeHintType.TRY_HARDER, true);
+    // TRY_HARDER is slower but detects harder-to-read codes.
+    hints.set(DecodeHintType.TRY_HARDER, highPrecision);
     readerRef.current = new BrowserMultiFormatReader(hints, {
       delayBetweenScanAttempts: 200,
       delayBetweenScanSuccess: 800,
     });
 
-    // Enumerate devices
+    // If we were actively scanning when the reader was rebuilt, resume seamlessly
+    if (restartScanningRef.current) {
+      restartScanningRef.current = false;
+      startScanning();
+    }
+
+    return () => {
+      // Remember whether the camera was live so the rebuilt reader can resume
+      restartScanningRef.current = isScanningRef.current;
+      stopScanning();
+    };
+  }, [highPrecision]);
+
+  // Enumerate devices once on mount
+  React.useEffect(() => {
     BrowserMultiFormatReader.listVideoInputDevices()
       .then((devs) => {
         const opts = devs.map((d, i) => ({
@@ -105,11 +125,6 @@ export function QrScanner({ onScan }: QrScannerProps) {
       .catch(() => {
         // Will retry after permission granted
       });
-
-    return () => {
-      stopScanning();
-    };
-     
   }, []);
 
   async function refreshDevices() {
@@ -181,6 +196,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
         }
       );
       setIsScanning(true);
+      isScanningRef.current = true;
     } catch (e) {
       console.error(e);
       const msg =
@@ -202,6 +218,7 @@ export function QrScanner({ onScan }: QrScannerProps) {
       controlsRef.current = null;
     }
     setIsScanning(false);
+    isScanningRef.current = false;
     setTorchOn(false);
   }
 
@@ -239,8 +256,8 @@ export function QrScanner({ onScan }: QrScannerProps) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+    const url = URL.createObjectURL(file);
     try {
-      const url = URL.createObjectURL(file);
       const reader = readerRef.current ?? new BrowserMultiFormatReader();
       const result = await reader.decodeFromImageUrl(url);
       const text = result.getText();
@@ -248,10 +265,11 @@ export function QrScanner({ onScan }: QrScannerProps) {
       setLastScan({ text, format, ts: Date.now() });
       onScan({ text, format });
       toast.success("Code detected from image");
-      URL.revokeObjectURL(url);
     } catch {
       toast.error("No QR/barcode found in that image");
     } finally {
+      // Always release the blob URL (also on decode failure)
+      URL.revokeObjectURL(url);
       // reset input so the same file can be re-selected
       e.target.value = "";
     }
@@ -390,6 +408,20 @@ export function QrScanner({ onScan }: QrScannerProps) {
             Stop Camera
           </Button>
         )}
+        <Button
+          variant="outline"
+          onClick={() => setHighPrecision((v) => !v)}
+          disabled={isStarting}
+          title={
+            highPrecision
+              ? "High accuracy (slower decoding)"
+              : "Fast mode (may miss hard-to-read codes)"
+          }
+          className="flex-1"
+        >
+          <Crosshair className="h-4 w-4" />
+          {highPrecision ? "Precision" : "Fast"}
+        </Button>
         <Button
           variant="outline"
           onClick={() => fileInputRef.current?.click()}

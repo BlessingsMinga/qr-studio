@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { HistoryItem, classifyContent } from "@/lib/qr/types";
+import { buildShareUrl } from "@/lib/qr/share";
 
 interface ShareMenuProps {
   item: HistoryItem;
@@ -52,7 +53,7 @@ export function ShareMenu({
 
   async function copyShareLink() {
     // Build a shareable link that encodes the content for others to view
-    const url = buildShareUrl(item);
+    const url = buildShareUrl({ t: item.type, f: item.format, c: item.content });
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Share link copied");
@@ -62,7 +63,7 @@ export function ShareMenu({
   }
 
   async function nativeShare() {
-    const url = buildShareUrl(item);
+    const url = buildShareUrl({ t: item.type, f: item.format, c: item.content });
     const shareData: ShareData = {
       title: isGenerated ? "QR Code" : cat.label,
       text: item.content,
@@ -191,34 +192,4 @@ export function ShareMenu({
       </DialogContent>
     </Dialog>
   );
-}
-
-function buildShareUrl(item: HistoryItem): string {
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : "";
-  const payload = {
-    t: item.type,
-    f: item.format,
-    c: item.content,
-  };
-  const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(payload))))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-  return `${origin}/?share=${encoded}`;
-}
-
-// Helper to decode share payload from URL on app load
-export function decodeSharePayload(encoded: string): {
-  t: string;
-  f: string;
-  c: string;
-} | null {
-  try {
-    const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
-    const json = decodeURIComponent(escape(atob(normalized)));
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
 }
